@@ -1,37 +1,66 @@
-require("dotenv").config();
+// server.js
+
+// 1️⃣ Import modules
 const express = require("express");
 const path = require("path");
-const fs = require("fs");
+require("dotenv").config();
+const { connectDB, getVideosCollection, getBucket } = require("./config/db");
+
+// 2️⃣ Initialize app
+const app = express();
+
+// 3️⃣ Middleware
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "../frontend"))); // frontend folder serve
+
+// 4️⃣ Routes
+
+// Default / route
 app.get("/", (req, res) => {
   res.send("Backend is running!");
 });
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+// Connect to MongoDB and setup API routes
+connectDB().then(() => {
+  const videosCollection = getVideosCollection();
+  const bucket = getBucket();
 
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, "../frontend")));
+  // Fetch all videos
+  app.get("/api/videos", async (req, res) => {
+    try {
+      const videos = await videosCollection.find({}).toArray();
+      res.json(videos);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch videos" });
+    }
+  });
 
-// Videos route
-app.get("/api/videos", (req, res) => {
-  const videos = JSON.parse(fs.readFileSync(path.join(__dirname, "data/videos.json")));
-  res.json(videos);
+  // Fetch list of PDFs
+  app.get("/api/pdfs", async (req, res) => {
+    try {
+      const files = await bucket.s.db.collection("uploads.files").find({}).toArray();
+      const filenames = files.map(file => file.filename);
+      res.json(filenames);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch PDF list" });
+    }
+  });
+
+  // Download specific PDF
+  app.get("/api/pdf/:filename", (req, res) => {
+    const filename = req.params.filename;
+    const downloadStream = bucket.openDownloadStreamByName(filename);
+
+    downloadStream.on("error", () => res.status(404).send("File not found"));
+    downloadStream.pipe(res);
+  });
 });
 
-// PDFs route
-app.get("/api/pdfs", (req, res) => {
-  const pdfs = JSON.parse(fs.readFileSync(path.join(__dirname, "data/pdfs.json")));
-  res.json(pdfs.map(f => f.filename));
-});
-
-// Auth routes
-const authRoutes = require("./routes/auth");
-app.use("/api/auth", authRoutes);
-
-// Test route
+// Test API route
 app.get("/api/test", (req, res) => res.send("Backend is running successfully!"));
 
-// Start server
-app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
+// 5️⃣ Start server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
