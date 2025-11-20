@@ -1,28 +1,25 @@
-/// db.js
-const mongoose = require("mongoose");
-const { GridFSBucket } = require("mongodb");
+const fs = require("fs");
+const path = require("path");
 
-let videosCollection;
-let bucket;
+const dataFile = path.join(__dirname, "videos.json");
 
-async function connectDB() {
-  const conn = await mongoose.connect(process.env.MONGO_URL);
-  console.log("MongoDB connected successfully!");
-
-  // Get native MongoDB driver for GridFS
-  const db = mongoose.connection.db;
-  videosCollection = db.collection("videos"); // your videos collection
-  bucket = new GridFSBucket(db, { bucketName: "uploads" });
-
-  return { videosCollection, bucket };
+// Ensure file exists
+if (!fs.existsSync(dataFile)) {
+  fs.writeFileSync(dataFile, JSON.stringify([]));
 }
 
-function getVideosCollection() {
-  return videosCollection;
+// Read all videos
+function getVideos() {
+  const jsonData = fs.readFileSync(dataFile, "utf8");
+  return JSON.parse(jsonData);
 }
 
-function getBucket() {
-  return bucket;
+// Add a new video
+function addVideo(video) {
+  const videos = getVideos();
+  videos.push(video);
+  fs.writeFileSync(dataFile, JSON.stringify(videos, null, 2));
 }
 
-module.exports = { connectDB, getVideosCollection, getBucket };
+module.exports = { getVideos, addVideo };
+
